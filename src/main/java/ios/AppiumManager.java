@@ -4,8 +4,6 @@
  *
  * @author Jesús Recio Rincón (@jesmrec)
  *
- * Last Appium review: v2.2.1
- * If posible, execute tests with such version
  */
 
 package ios;
@@ -79,7 +77,7 @@ public class AppiumManager {
         if (System.getProperty("device") != null && !System.getProperty("device").isEmpty()) {
             capabilities.setCapability("appium:deviceName", System.getProperty("device"));
         } else {
-            capabilities.setCapability("appium:deviceName", "iPhone 16");
+            capabilities.setCapability("appium:deviceName", "iPhone 15");
         }
 
         capabilities.setCapability("appium:udid", System.getProperty("udid"));
@@ -97,9 +95,11 @@ public class AppiumManager {
 
         capabilities.setCapability("appium:newCommandTimeout", 60);
 
-        capabilities.setCapability("appium:platformVersion", "18.2");
+        capabilities.setCapability("appium:platformVersion", "17.2");
 
-        capabilities.setCapability("appium:useNewWDA", false);
+        capabilities.setCapability("appium:useNewWDA", true);
+
+        capabilities.setCapability("appium:bundleId", "com.owncloud.ios-app");
 
     }
 }
