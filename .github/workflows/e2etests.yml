@@ -27,18 +27,18 @@ jobs:
       #    brew install carthage
       #    chmod +x ./runAppium.sh # install and run appium server in the background
       #    ./runAppium.sh
-      - name: Run simulator
-        uses: futureware-tech/simulator-action@v4
-        with:
-          os: 'iOS'
-          model: 'iPhone 15'
-          os_version: '17.2'
-          wait_for_boot: 'true'
-          udid: '295CA147-D5E2-46D6-B6DD-E2D4397CC460'
-          shutdown_after_job: 'true'
-      - name: Check if device is booted
-        run: |
-          xcrun simctl list | grep -i booted          
+      #- name: Run simulator
+      #  uses: futureware-tech/simulator-action@v4
+      #  with:
+      #    os: 'iOS'
+      #    model: 'iPhone 15'
+      #    os_version: '17.2'
+      #    wait_for_boot: 'true'
+      #    udid: '295CA147-D5E2-46D6-B6DD-E2D4397CC460'
+      #    shutdown_after_job: 'true'
+      #- name: Check if device is booted
+      #  run: |
+      #    xcrun simctl list | grep -i booted          
       #- name: Clone WebDriverAgent
       #  run: |
       #    git clone https://github.com/appium/WebDriverAgent.git
@@ -67,9 +67,8 @@ jobs:
       #    tccutil reset All com.apple.WebDriverAgentRunner
       - name: Run Tests
         run: |
-          brew install ios-deploy
-          brew install carthage
+          xcrun simctl boot "iPhone 15"
+          xcrun simctl list devices
           chmod +x ./runAppium.sh # install and run appium server in the background
           ./runAppium.sh
-          sleep 10
           ./executeTests -t @createfolder
