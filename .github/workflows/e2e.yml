@@ -1,0 +1,43 @@
+name: E2E tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * 1-5'  # Monday to Friday at 2:30AM
+  push:
+    branches:
+      - test/actions
+
+jobs:
+  build:
+    name: Build .app with Xcode 16.3
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Clone external repo
+        run: git clone https://github.com/owncloud/ios-app.git ios-app
+
+      - name: Build the .app
+        run: |
+          cd ios-app
+          xcodebuild \
+            -scheme "ownCloud" \
+            -project "ownCloud.xcodeproj"
+            -configuration Release \
+            -derivedDataPath build
+
+      - name: Locate .app file
+        id: find_app
+        run: |
+          APP_PATH=$(find build/Build/Products/Release -type d -name "*.app" | head -n 1)
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_OUTPUT
+          ls -al $APP_PATH
+
+      - name: Upload .app as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuiltApp
+          path: ${{ steps.find_app.outputs.APP_PATH }}
