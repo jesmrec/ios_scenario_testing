@@ -1,0 +1,376 @@
+name: E2E tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - test/actions
+
+jobs:
+  build:
+    name: Build .app with Xcode 16.2 
+    runs-on: macos-14
+
+    steps:
+      - name: Clone external repo
+        run: git clone --recurse-submodules https://github.com/owncloud/ios-app.git ios-app
+
+      - name: Move app project to root
+        run: |
+          cp -R ios-app/* .
+          rm -rf ios-app
+          ls -al .
+          ls -al ios-sdk/
+
+      - name: Adapt code to be tested
+        run: |
+          sed -i '' 's/.showBetaWarning : true/.showBetaWarning : false/i' ownCloudAppShared/Tools/VendorServices.swift
+          grep .showBetaWarning ownCloudAppShared/Tools/VendorServices.swift
+          sed -i '' 's/.isBetaBuild : false/.isBetaBuild : true/i' ownCloudAppShared/Tools/VendorServices.swift
+          grep .isBetaBuild ownCloudAppShared/Tools/VendorServices.swift
+          sed -i '' 's/value: OCLicenseQAProvider.isQAUnlockEnabled,/value: true,/i' ownCloud/Settings/DisplaySettingsSection.swift
+          grep .isQAUnlockEnabled ownCloud/Settings/DisplaySettingsSection.swift
+          sed -i '' '170,200d' ownCloud/Release\ Notes/ReleaseNotesHostViewController.swift
+          grep -C 2 shouldShowReleaseNotes ownCloud/Release\ Notes/ReleaseNotesHostViewController.swift
+          printf '%s\n' 'OCConnectionAllowedAuthenticationMethodIDs      : @[ OCAuthenticationMethodIdentifierBasicAuth ],' | \
+          sed -i '' '136r /dev/stdin' ios-sdk/ownCloudSDK/Connection/OCConnection.m
+
+      - name: Use Xcode 16.2
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Set up derived data and build output folders
+        run: |
+          mkdir -p DerivedData BuildOutput
+
+      - name: Build for iOS Simulator (no code signing)
+        run: |
+          xcodebuild \
+          -project ownCloud.xcodeproj \
+          -scheme ownCloud \
+          -sdk iphonesimulator \
+          -destination "platform=iOS Simulator,OS=18.1,name=iPhone 16" \
+          -configuration Debug \
+          -derivedDataPath DerivedData \
+          -skipPackagePluginValidation \
+          -skipMacroValidation \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          build | tee build.log | xcpretty
+
+      - name: Check build log summary
+        run: |
+          tail -n 30 build.log
+
+      - name: Copy .app to artifacts
+        run: |
+          mkdir -p artifacts
+          APP_PATH=$(find DerivedData -name "ownCloud.app" -type d | head -n 1)
+          echo "APP_PATH=${APP_PATH}"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: .app not found. Failing intentionally."
+            exit 1
+          fi
+          ditto "$APP_PATH" "artifacts/ownCloud.app"
+
+      - name: Show content of artifacts folder
+        run: |
+          ls -al artifacts
+          du -sh artifacts/ownCloud.app
+
+      - name: List openssl.framework content and file type
+        run: |
+          ls -l ./DerivedData/Build/Products/Debug-iphonesimulator/ownCloud.app/Frameworks/openssl.framework
+          file ./DerivedData/Build/Products/Debug-iphonesimulator/ownCloud.app/Frameworks/openssl.framework/OpenSSL || echo "Executable not found"
+
+      - name: Verify app binary is present
+        run: |
+          BIN="artifacts/ownCloud.app/ownCloud"
+          if [ -f "$BIN" ]; then
+            echo "✅ App binary found:"
+            file "$BIN"
+          else
+            echo "❌ App binary missing at: $BIN"
+            exit 1
+          fi
+
+      - name: Ensure OpenSSL binary is executable
+        run: |
+          FRAMEWORK_BIN="artifacts/ownCloud.app/Frameworks/openssl.framework/OpenSSL"
+          echo "🔒 Setting executable permission"
+          chmod +x "$FRAMEWORK_BIN"
+          ls -l "$FRAMEWORK_BIN"
+
+      - name: Codesign framework and app with verbose output
+        run: |
+          APP_PATH="artifacts/ownCloud.app"
+          FRAMEWORK="$APP_PATH/Frameworks/openssl.framework"
+
+          echo "Re-signing framework..."
+          codesign --force --sign - --verbose=4 "$FRAMEWORK" || exit 1
+
+          echo "Re-signing app..."
+          codesign --force --sign - --deep --verbose=4 "$APP_PATH" || exit 1
+
+          echo "Verifying signature..."
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH" || exit 1
+
+          codesign -dvv "$APP_PATH" || echo "🔍 No se pudo extraer info de firma"
+
+      - name: Zip .app
+        run: |
+          echo "Zipping artifacts/ownCloud.app into ownCloud.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent artifacts/ownCloud.app "ownCloud.app.zip"
+
+      - name: Upload zipped .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ownCloud.app.zip
+          path: ownCloud.app.zip
+
+  tests:
+    name: E2E tests
+    needs: build
+    runs-on: macos-14
+
+    env:
+      DEVICE_NAME: "iPhone 16"
+      IOS_VERSION: "18.1"
+      OC_SERVER_URL: ${{ secrets.OC_SERVER_URL }}
+      BACKEND: oCIS
+
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download .app zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ownCloud.app.zip
+          path: ./src/test/resources
+
+      - name: Unzip .app artifact and list contents
+        run: |
+          unzip -o ./src/test/resources/ownCloud.app.zip -d ./src/test/resources
+          ls -al src/test/resources/ownCloud.app
+          ls -l src/test/resources/ownCloud.app/Frameworks/openssl.framework
+
+      - name: Remove extended attributes (important!)
+        run: xattr -cr ./src/test/resources/ownCloud.app
+
+      - name: Verify OpenSSL framework binary exists and set executable
+        run: |
+          FRAMEWORK_BIN="./src/test/resources/ownCloud.app/Frameworks/openssl.framework/OpenSSL"
+          if [ ! -f "$FRAMEWORK_BIN" ]; then
+            echo "❌ OpenSSL binary missing: $FRAMEWORK_BIN"
+            exit 1
+          fi
+          chmod +x "$FRAMEWORK_BIN"
+          ls -l "$FRAMEWORK_BIN"
+
+      - name: Fix CFBundleExecutable in openssl.framework Info.plist with verbose logging
+        run: |
+          FRAMEWORK_PATH="./src/test/resources/ownCloud.app/Frameworks/openssl.framework"
+          INFO_PLIST="$FRAMEWORK_PATH/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            echo "Before fix:"
+            /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$INFO_PLIST" || echo "CFBundleExecutable missing"
+            if /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$INFO_PLIST"; then
+              /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable OpenSSL" "$INFO_PLIST"
+            else
+              /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string OpenSSL" "$INFO_PLIST"
+            fi
+            plutil -convert xml1 "$INFO_PLIST"
+            echo "After fix:"
+            /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$INFO_PLIST"
+          else
+            echo "❌ Info.plist not found: $INFO_PLIST"
+            exit 1
+          fi
+
+      - name: Verify app executable exists and is executable
+        run: |
+          APP_EXEC="./src/test/resources/ownCloud.app/ownCloud"
+          if [ ! -x "$APP_EXEC" ]; then
+            echo "❌ App binary missing or not executable: $APP_EXEC"
+            exit 1
+          else
+            ls -l "$APP_EXEC"
+            file "$APP_EXEC"
+          fi
+
+      - name: Re-sign OpenSSL framework (without timestamp) with verbose output
+        run: |
+          FRAMEWORK_PATH="./src/test/resources/ownCloud.app/Frameworks/openssl.framework"
+          if [ -d "$FRAMEWORK_PATH" ]; then
+            codesign --force --sign - --timestamp=none --verbose=4 "$FRAMEWORK_PATH"
+          else
+            echo "❌ Framework folder missing: $FRAMEWORK_PATH"
+            exit 1
+          fi
+
+      - name: Re-sign the entire .app bundle (without timestamp) with verbose output
+        run: |
+          APP_PATH="./src/test/resources/ownCloud.app"
+          codesign --force --sign - --timestamp=none --deep --verbose=4 "$APP_PATH"
+
+      - name: Reset iOS simulators for clean state (logs + force quit + erase)
+        run: |
+          pkill -9 Simulator || true
+          killall -9 com.apple.CoreSimulator.CoreSimulatorService || true
+          xcrun simctl shutdown all || true
+          xcrun simctl erase all || true
+          echo "Simulators reset done."
+
+      - name: Boot iOS simulator and wait for readiness with retries and logs
+        run: |
+          UDID=$(xcrun simctl list devices available | grep "iPhone 16 (" | head -n1 | awk -F '[()]' '{print $2}')
+          echo "Booting simulator $UDID"
+          if [ -z "$UDID" ]; then
+            echo "❌ Simulator UDID not found"
+            exit 1
+          fi
+          xcrun simctl boot "$UDID"
+          attempts=0
+          until xcrun simctl bootstatus "$UDID" -b || [ $attempts -ge 10 ]; do
+            echo "Waiting for simulator to boot... Attempt $((attempts+1))"
+            sleep 5
+            attempts=$((attempts+1))
+          done
+          if [ $attempts -ge 10 ]; then
+            echo "❌ Simulator failed to boot in time"
+            exit 1
+          fi
+          echo "Simulator booted."
+
+      - name: Install .app on simulator with retry and logs
+        run: |
+          UDID=$(xcrun simctl list devices available | grep "iPhone 16 (" | head -n1 | awk -F '[()]' '{print $2}')
+          APP_PATH="./src/test/resources/ownCloud.app"
+          if [ -z "$UDID" ]; then
+            echo "❌ Simulator UDID not found"
+            exit 1
+          fi
+
+          tries=0
+          max_tries=5
+          until xcrun simctl install "$UDID" "$APP_PATH"; do
+            tries=$((tries+1))
+            echo "Install failed, retry $tries/$max_tries"
+            if [ $tries -ge $max_tries ]; then
+              echo "❌ Failed to install app after $max_tries tries"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "App installed on simulator."
+
+      - name: Launch app on simulator and verify it's running with logs
+        run: |
+          UDID=$(xcrun simctl list devices available | grep "iPhone 16 (" | head -n1 | awk -F '[()]' '{print $2}')
+          BUNDLE_ID="com.owncloud.ios-app"
+
+          echo "Launching app with bundle ID $BUNDLE_ID..."
+          LAUNCH_OUTPUT=$(xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1) || {
+            echo "❌ Failed to launch app with bundle ID $BUNDLE_ID"
+            echo "Launch output:"
+            echo "$LAUNCH_OUTPUT"
+            echo "Crash reports:"
+            ls -lt ~/Library/Logs/DiagnosticReports | head -20
+            exit 1
+          }
+
+          echo "✅ Launch output: $LAUNCH_OUTPUT"
+          echo "Waiting 10 seconds for app to stabilize..."
+          sleep 10
+
+          echo "Verifying if app is running by inspecting processes in simulator..."
+          PROCESS_LIST=$(xcrun simctl spawn "$UDID" launchctl list)
+
+          if echo "$PROCESS_LIST" | grep -q "$BUNDLE_ID"; then
+            echo "✅ App process detected in simulator:"
+            echo "$PROCESS_LIST" | grep "$BUNDLE_ID"
+          else
+            echo "❌ App process not found. Possibly crashed."
+            echo "Crash reports:"
+            ls -lt ~/Library/Logs/DiagnosticReports | head -10
+            exit 1
+          fi
+
+      - name: Collect and upload crash reports
+        if: always()
+        run: |
+          APP_BUNDLE_ID="com.tu.bundle.id"
+          APP_DATA_PATH=$(xcrun simctl get_app_container booted $APP_BUNDLE_ID data)
+          echo "App data path: $APP_DATA_PATH"
+          mkdir -p ~/crash_reports
+          if ls "$APP_DATA_PATH/Library/Logs/DiagnosticReports/"*.crash 1> /dev/null 2>&1; then
+            cp "$APP_DATA_PATH/Library/Logs/DiagnosticReports/"*.crash ~/crash_reports/
+            echo "Crash reports copied"
+          else
+            echo "No crash reports found"
+          fi
+        shell: bash
+
+      - name: Upload crash reports artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash_reports
+          path: ~/crash_reports/
+
+      - name: Check app binary architecture
+        run: file ./src/test/resources/ownCloud.app/ownCloud
+
+      - name: Check OpenSSL framework architecture
+        run: file ./src/test/resources/ownCloud.app/Frameworks/openssl.framework/OpenSSL
+
+      - name: Start Appium server
+        run: |
+          mkdir -p logs video
+          chmod +x ./runAppium.sh
+          ./runAppium.sh
+
+      - name: Run E2E tests
+        run: |
+          export APPIUM_URL=http://localhost:4723
+          ./executeTests -t @createfolder
+
+      - name: Show last simulator logs
+        if: failure()
+        run: |
+          echo "🔍 Showing last simulator logs:"
+          xcrun simctl spawn booted log show --style syslog --last 5m | tail -n 100
+
+      - name: Zip recorded video files
+        if: always()
+        run: zip -r -9 test-recordings.zip video
+
+      - name: Show Appium logs
+        if: failure()
+        run: |
+          echo "📄 Showing Appium logs:"
+          tail -n 200 appium.log || echo "❌ Could not read Appium log"
+
+      - name: Upload Appium logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-log
+          path: ./appium.log
+
+      - name: Upload test video recordings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-recordings
+          path: ./test-recordings.zip

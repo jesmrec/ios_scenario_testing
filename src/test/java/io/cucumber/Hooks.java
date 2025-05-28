@@ -6,6 +6,7 @@
 
 package io.cucumber;
 
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.logging.Level;
@@ -14,6 +15,7 @@ import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.Scenario;
 import ios.AppiumManager;
+import ios.CommonPage;
 import utils.LocProperties;
 import utils.entities.OCFile;
 import utils.log.Log;
@@ -32,6 +34,7 @@ public class Hooks {
     public void setup(Scenario scenario){
         Log.log(Level.FINE, "======= START SCENARIO EXECUTION: " + scenario.getName() + "=======");
         AppiumManager.getManager().getDriver().activateApp(bundleId);
+        CommonPage.startRecording();
     }
 
     //After every scenario
@@ -39,6 +42,10 @@ public class Hooks {
     public void tearDown(Scenario scenario) throws Throwable {
         cleanUp();
         Log.log(Level.FINE, "======= END SCENARIO EXECUTION: " + scenario.getName() + "========\n\n");
+        String featurePath = scenario.getUri().toString();
+        String featureName = Paths.get(featurePath).getFileName().toString()
+                .replace(".feature", "");
+        CommonPage.stopRecording(scenario.getName(), featureName);
         AppiumManager.getManager().getDriver().terminateApp(bundleId);
     }
 

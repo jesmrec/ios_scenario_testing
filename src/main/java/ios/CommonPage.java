@@ -31,6 +31,7 @@ import java.util.logging.Level;
 import java.util.regex.Pattern;
 
 import io.appium.java_client.AppiumBy;
+import io.appium.java_client.android.AndroidStartScreenRecordingOptions;
 import io.appium.java_client.ios.IOSDriver;
 import io.appium.java_client.ios.IOSStartScreenRecordingOptions;
 import io.appium.java_client.ios.IOSStartScreenRecordingOptions.VideoQuality;
@@ -206,22 +207,31 @@ public class CommonPage {
     }
 
     public static void startRecording() {
-        IOSStartScreenRecordingOptions iOSStartScreenRecordingOptions =
-                new IOSStartScreenRecordingOptions()
-                        .withVideoQuality(VideoQuality.MEDIUM);
-        driver.startRecordingScreen(iOSStartScreenRecordingOptions);
+        AndroidStartScreenRecordingOptions androidStartScreenRecordingOptions =
+                new AndroidStartScreenRecordingOptions();
+        androidStartScreenRecordingOptions.withBitRate(2000000);
+        androidStartScreenRecordingOptions.withVideoSize("360x640");
+        driver.startRecordingScreen(androidStartScreenRecordingOptions);
     }
 
-    public static void stopRecording(String filename) {
+    public static void stopRecording(String filename, String featureName) {
         String base64String = driver.stopRecordingScreen();
         byte[] data = Base64.decodeBase64(base64String);
-        String destinationPath = "video/" + filename + "_" +
+        createFeatureFolder(featureName);
+        String destinationPath = "video/" + featureName + "/" + filename + "_" +
                 sdf.format(new Timestamp(System.currentTimeMillis()).getTime()) + ".mp4";
         Path path = Paths.get(destinationPath);
         try {
             Files.write(path, data);
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.log(Level.FINE, e.getMessage());
+        }
+    }
+
+    private static void createFeatureFolder(String featureName) {
+        File folder = new File("video/" + featureName);
+        if (!folder.exists()) {
+            folder.mkdirs();
         }
     }
 }

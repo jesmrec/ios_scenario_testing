@@ -93,15 +93,17 @@ public class AppiumManager {
         //The following capabilities prevents reinstalling the app every test.
         capabilities.setCapability("appium:fullReset", false);
 
-        capabilities.setCapability("appium:noReset", false);
+        capabilities.setCapability("appium:noReset", true);
 
         capabilities.setCapability("appium:newCommandTimeout", 60);
 
         capabilities.setCapability("appium:commandTimeouts", 5000);
 
-        capabilities.setCapability("appium:platformVersion", "18.4");
+        capabilities.setCapability("appium:platformVersion", "18.1");
 
-        capabilities.setCapability("appium:useNewWDA", false);
+        capabilities.setCapability("appium:useNewWDA", true);
+
+        capabilities.setCapability("appium:waitForQuiescence", false);
 
     }
 }
