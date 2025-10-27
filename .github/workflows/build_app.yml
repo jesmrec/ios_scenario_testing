@@ -1,0 +1,172 @@
+name: E2E tests
+
+on:
+  push:
+    branches:
+      - feature/workflow_create_app
+  workflow_dispatch:
+    inputs:
+      xcode_version:
+        description: 'Xcode version to build from'
+        type: string
+      os_version:
+        description: 'iOS Simulator OS version'
+        type: string
+      device:
+        description: 'Simulator device name'
+        type: string
+  workflow_call:
+    inputs:
+      xcode_version:
+        description: 'Xcode version to build from'
+        type: string
+      os_version:
+        description: 'iOS Simulator OS version'
+        type: string
+      device:
+        description: 'Simulator device name'
+        type: string
+
+jobs:
+  build:
+    name: Build .app with Xcode
+    runs-on: macos-15
+
+    env:
+      DEFAULT_XCODE: ${{ secrets.DEFAULT_XCODE }}
+      DEFAULT_OS: ${{ secrets.DEFAULT_OS }}
+      DEFAULT_DEVICE: ${{ secrets.DEFAULT_DEVICE }}
+
+    steps:
+      # Set variables for Xcode version, simulator OS and device
+      # Falls back to environment variables if inputs are not provided
+      - name: Set default inputs from env
+        run: |
+          echo "XCODE_VERSION=${{ inputs.xcode_version || env.DEFAULT_XCODE }}" >> $GITHUB_ENV
+          echo "OS_VERSION=${{ inputs.os_version || env.DEFAULT_OS }}" >> $GITHUB_ENV
+          echo "DEVICE=${{ inputs.device || env.DEFAULT_DEVICE }}" >> $GITHUB_ENV
+
+      # Clone the iOS app repository with submodules
+      - name: Clone external repo
+        run: git clone --recurse-submodules https://github.com/owncloud/ios-app.git .
+
+      # Apply code changes for testing purposes
+      - name: Adapt code to be tested
+        run: |
+          sed -i '' 's/.showBetaWarning : true/.showBetaWarning : false/i' ownCloudAppShared/Tools/VendorServices.swift
+          grep .showBetaWarning ownCloudAppShared/Tools/VendorServices.swift
+          sed -i '' 's/.isBetaBuild : false/.isBetaBuild : true/i' ownCloudAppShared/Tools/VendorServices.swift
+          grep .isBetaBuild ownCloudAppShared/Tools/VendorServices.swift
+          sed -i '' 's/value: OCLicenseQAProvider.isQAUnlockEnabled,/value: true,/i' ownCloud/Settings/DisplaySettingsSection.swift
+          grep .isQAUnlockEnabled ownCloud/Settings/DisplaySettingsSection.swift
+          sed -i '' '170,200d' ownCloud/Release\ Notes/ReleaseNotesHostViewController.swift
+          grep -C 2 shouldShowReleaseNotes ownCloud/Release\ Notes/ReleaseNotesHostViewController.swift
+          printf '%s\n' 'OCConnectionAllowedAuthenticationMethodIDs      : @[ OCAuthenticationMethodIdentifierBasicAuth ],' | \
+          sed -i '' '136r /dev/stdin' ios-sdk/ownCloudSDK/Connection/OCConnection.m
+
+      # Install and set up the requested version of Xcode
+      - name: Use Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Set up derived data and build output folders
+        run: |
+          mkdir -p DerivedData
+
+      # Build the app for the iOS Simulator without code signing
+      - name: Build .app for Simulator (always compatible)
+        run: |
+          # Define paths
+          DERIVED_DATA="DerivedData"
+          CONFIGURATION="Debug"
+          APP_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION-iphonesimulator/ownCloud.app"
+          BIN="$APP_PATH/ownCloud"
+
+          # Build the app for simulator
+          xcodebuild \
+            -project ownCloud.xcodeproj \
+            -scheme ownCloud \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            -configuration $CONFIGURATION \
+            -derivedDataPath $DERIVED_DATA \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS="x86_64 arm64" \
+            EXCLUDED_ARCHS="" \
+            build | tee build.log | xcpretty
+
+          # Verify binary exists
+          if [ ! -f "$BIN" ]; then
+            echo "❌ Binary not found at $BIN"
+            exit 1
+          fi
+
+          # Inspect binary architecture
+          echo "🔍 Inspecting binary architecture:"
+          file "$BIN"
+          ARCHS=$(lipo -info "$BIN" | sed 's/.*are: //; s/.*architecture: //')
+          echo "📦 Detected architectures: $ARCHS"
+
+          # Fail if not simulator-compatible
+          if echo "$ARCHS" | grep -qE "(x86_64|arm64)"; then
+            echo "✅ Binary includes simulator-compatible architecture."
+          else
+            echo "❌ Binary not compatible with iOS Simulator (expected x86_64 or arm64)."
+            exit 1
+          fi
+
+          # Prepare artifacts folder
+          ditto "$APP_PATH" "artifacts/ownCloud.app"
+          echo "✅ Artifacts ready in ./artifacts/ownCloud.app"
+
+      # Show the contents of the artifacts folder
+      - name: Show content of artifacts folder
+        run: |
+          ls -al artifacts
+          du -sh artifacts/ownCloud.app
+
+      # List the openssl.framework inside the app bundle and verify file types
+      - name: List openssl.framework content and file type
+        run: |
+          ls -l ./DerivedData/Build/Products/Debug-iphonesimulator/ownCloud.app/Frameworks/openssl.framework
+
+      # Zip the .app folder to upload as artifact
+      - name: Zip .app
+        run: |
+          echo "Zipping artifacts/ownCloud.app into ownCloud.app.zip"
+          ditto -c -k --sequesterRsrc --keepParent artifacts/ownCloud.app "ownCloud.app.zip"
+
+      # Upload the zipped .app as a GitHub Actions artifact
+      - name: Upload zipped .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ownCloud.app.zip
+          path: ownCloud.app.zip
+
+      # Zip the log as artifact
+      - name: Zip build log
+        if: always()
+        run: |
+          echo "Zipping build.log into build.log.zip"
+          ditto -c -k --sequesterRsrc build.log build.log.zip || true
+
+      # Upload the zipped log as a GitHub Actions artifact
+      - name: Upload zipped build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log.zip
+
+      # Clean up temporary build directories, runs even if previous steps fail
+      - name: Clean build artifacts
+        if: always()
+        run: |
+          echo "Cleaning DerivedData and temporary files"
+          rm -rf DerivedData
+          echo "Cleaned."
