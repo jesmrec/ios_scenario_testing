@@ -1,0 +1,21 @@
+name: E2E tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/workflow_create_app
+
+jobs:
+  build_app:
+    uses: ./.github/workflows/build_app.yml
+    with:
+      xcode_version: ${{ vars.DEFAULT_XCODE }}
+      os_version: ${{ vars.DEFAULT_OS }}
+      device: ${{ vars.DEFAULT_DEVICE }}
+
+  tests:
+    needs: build_app
+    uses: ./.github/workflows/launch_tests.yml
+    with:
+      artifact_app: ownCloud.app.zip

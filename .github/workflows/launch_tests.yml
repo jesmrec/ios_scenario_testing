@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  workflow_call:
+    inputs:
+      artifact_app:
+        description: 'Name of the .app artifact to test'
+        type: string
+    
+jobs:
+  tests:
+    name: launch_tests
+    runs-on: macos-15
+
+    steps:
+      # Checkout repo 
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Download artifacts
+      - name: Download app artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_app }}
+          path: ./src/test/resources 
+
+      # List folders
+      - name: List stuff
+        run: |
+          rm -rf ./src/test/resources/ownCloud.app
+          ls -al .
+          ls -al ./src/test/resources
+
+      # Unzip the app
+      - name: Unzip app artifact
+        run: |
+          APP_ZIP="./src/test/resources/${{ inputs.artifact_app }}"
+          TARGET_DIR="./src/test/resources/"
+          
+          echo "Unzipping $APP_ZIP to $TARGET_DIR"
+          unzip -q "$APP_ZIP" -d "$TARGET_DIR"
+          
+          echo "Unzipped content:"
+          ls -R "$TARGET_DIR"/ownCloud.app
+          rm -rf ./src/test/resources/ownCloud.app.zip
+          ls -al ./src/test/resources
+
+      # Verify the .app folder exists
+      - name: Verify .app exists
+        run: |
+          if [ ! -d "./src/test/resources/ownCloud.app" ]; then
+            echo "❌ .app not found after unzip!"
+            exit 1
+          fi
+          echo "✅ .app found and ready for testing"

@@ -1,9 +1,6 @@
-name: E2E tests
+name: Build app
 
 on:
-  push:
-    branches:
-      - feature/workflow_create_app
   workflow_dispatch:
     inputs:
       xcode_version:
@@ -26,6 +23,10 @@ on:
       device:
         description: 'Simulator device name'
         type: string
+    outputs:
+        artifact-name:
+          description: ".app file as test subject"
+          value: ownCloud.app.zip
 
 jobs:
   build:
@@ -33,9 +34,9 @@ jobs:
     runs-on: macos-15
 
     env:
-      DEFAULT_XCODE: ${{ secrets.DEFAULT_XCODE }}
-      DEFAULT_OS: ${{ secrets.DEFAULT_OS }}
-      DEFAULT_DEVICE: ${{ secrets.DEFAULT_DEVICE }}
+      DEFAULT_XCODE: ${{ vars.DEFAULT_XCODE }}
+      DEFAULT_OS: ${{ vars.DEFAULT_OS }}
+      DEFAULT_DEVICE: ${{ vars.DEFAULT_DEVICE }}
 
     steps:
       # Set variables for Xcode version, simulator OS and device
