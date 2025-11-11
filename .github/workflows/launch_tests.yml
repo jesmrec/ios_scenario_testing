@@ -33,6 +33,7 @@ jobs:
           rm -rf ./src/test/resources/ownCloud.app
           ls -al .
           ls -al ./src/test/resources
+          xcrun simctl list devices
 
       # Unzip the app
       - name: Unzip app artifact
@@ -65,13 +66,32 @@ jobs:
           DEVICE="${{ vars.DEFAULT_DEVICE }}"
           OS_VERSION="${{ vars.DEFAULT_OS }}"
 
-          xcrun simctl boot "$DEVICE" || true
+          # Find the UDID of the desired simulator
+          UDID=$(xcrun simctl list devices "$OS_VERSION" \
+            | grep -E "^\s*$DEVICE \(" \
+            | head -n 1 \
+            | awk -F '[()]' '{print $2}')
 
-          # Wait until the simulator is fully ready
-          echo "Waiting for simulator to be ready..."
-          xcrun simctl bootstatus "$DEVICE" -b
+          if [ -z "$UDID" ]; then
+            echo "❌ Simulator not found: $DEVICE ($OS_VERSION)"
+            exit 1
+          fi
 
-          echo "✅ Simulator $DEVICE ($OS_VERSION) is up and running!"
+          # Check if the simulator is already booted
+          STATE=$(xcrun simctl list devices | grep "$UDID" | awk -F'[()]' '{print $4}')
+
+          if [ "$STATE" = "Booted" ]; then
+            echo "✅ Simulator '$DEVICE' ($OS_VERSION) is already running (UDID: $UDID)."
+          else
+            echo "🚀 Booting simulator '$DEVICE' ($OS_VERSION)..."
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            echo "UDID_DEVICE=$UDID" >> $GITHUB_ENV
+            echo "✅ Simulator is now ready."
+          fi
+
+          # Optionally, print the booted simulator list for debugging
+          xcrun simctl list devices | grep Booted
 
       # Set up enviroment
       - name: Setup JDK
