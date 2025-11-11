@@ -90,6 +90,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Start Appium
+        run: |
+          mkdir -p logs video
+          chmod +x ./runAppium.sh
+          ./runAppium.sh
+
       # Launch tests
       - name: Launch tests
         env:
