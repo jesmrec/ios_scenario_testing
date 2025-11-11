@@ -6,7 +6,10 @@ on:
       artifact_app:
         description: 'Name of the .app artifact to test'
         type: string
-    
+    secrets:
+      OC_SERVER_URL:
+        required: true  
+
 jobs:
   tests:
     name: launch_tests
@@ -53,3 +56,44 @@ jobs:
             exit 1
           fi
           echo "✅ .app found and ready for testing"
+
+      # Launch simulator
+      - name: Start iOS Simulator
+        run: |
+          echo "Creating and booting iOS Simulator..."
+
+          DEVICE="${{ vars.DEFAULT_DEVICE }}"
+          OS_VERSION="${{ vars.DEFAULT_OS }}"
+
+          xcrun simctl boot "$DEVICE" || true
+
+          # Wait until the simulator is fully ready
+          echo "Waiting for simulator to be ready..."
+          xcrun simctl bootstatus "$DEVICE" -b
+
+          echo "✅ Simulator $DEVICE ($OS_VERSION) is up and running!"
+
+      # Set up enviroment
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # Launch tests
+      - name: Launch tests
+        env:
+          OC_SERVER_URL: ${{ secrets.OC_SERVER_URL }}
+          BACKEND: "oCIS"
+        run: |
+          ./executeTests -t @createfolder
