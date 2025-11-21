@@ -1,0 +1,32 @@
+name: Build WDA
+
+on:
+  push:
+    branches:
+      - feature/workflow_create_app
+jobs:
+  build-wda:
+    runs-on: macos-latest
+    env:
+      DEVICE: ${{ vars.DEFAULT_DEVICE }}
+      OS: ${{ vars.DEFAULT_OS }}
+      XCODE: ${{ vars.DEFAULT_XCODE }}
+    steps:
+      - name: Clone WebDriverAgent
+        run: |
+          git clone https://github.com/appium/WebDriverAgent.git
+      - name: Build WebDriverAgent for simulator
+        run: |
+          cd WebDriverAgent
+          xcodebuild \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath ./DerivedData \
+            -destination "platform=iOS Simulator,name=$DEVICE,OS=$OS" \
+            build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wda-derived
+          path: WebDriverAgent/DerivedData
