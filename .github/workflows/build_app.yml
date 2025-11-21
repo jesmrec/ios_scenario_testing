@@ -164,10 +164,3 @@ jobs:
           name: build-log
           path: build.log.zip
 
-      # Clean up temporary build directories, runs even if previous steps fail
-      - name: Clean build artifacts
-        if: always()
-        run: |
-          echo "Cleaning DerivedData and temporary files"
-          rm -rf DerivedData
-          echo "Cleaned."
