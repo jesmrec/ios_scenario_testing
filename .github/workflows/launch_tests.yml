@@ -6,6 +6,10 @@ on:
       artifact_app:
         description: 'Name of the .app artifact to test'
         type: string
+      wda:
+        description: 'Name of WDA artifact'
+        type: string
+        required: true
     secrets:
       OC_SERVER_URL:
         required: true  
@@ -14,6 +18,10 @@ jobs:
   tests:
     name: launch_tests
     runs-on: macos-15
+
+    env:
+        DEVICE: ${{ vars.DEFAULT_DEVICE }}
+        OS: ${{ vars.DEFAULT_OS }}
 
     steps:
       # Checkout repo 
@@ -67,7 +75,7 @@ jobs:
           OS_VERSION="${{ vars.DEFAULT_OS }}"
 
           # Find the UDID of the desired simulator
-          UDID=$(xcrun simctl list devices "$OS_VERSION" \
+          UDID=$(xcrun simctl list devices "iOS $OS_VERSION" \
             | grep -E "^\s*$DEVICE \(" \
             | head -n 1 \
             | awk -F '[()]' '{print $2}')
@@ -80,18 +88,66 @@ jobs:
           # Check if the simulator is already booted
           STATE=$(xcrun simctl list devices | grep "$UDID" | awk -F'[()]' '{print $4}')
 
+          # Export UDID always
+          echo "UDID_DEVICE=$UDID" >> $GITHUB_ENV
+
           if [ "$STATE" = "Booted" ]; then
             echo "✅ Simulator '$DEVICE' ($OS_VERSION) is already running (UDID: $UDID)."
           else
             echo "🚀 Booting simulator '$DEVICE' ($OS_VERSION)..."
             xcrun simctl boot "$UDID"
             xcrun simctl bootstatus "$UDID" -b
-            echo "UDID_DEVICE=$UDID" >> $GITHUB_ENV
             echo "✅ Simulator is now ready."
           fi
 
           # Optionally, print the booted simulator list for debugging
           xcrun simctl list devices | grep Booted
+
+      - name: Download WebDriverAgent artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.wda }}
+
+      - name: Install and launch WebDriverAgent on simulator
+        env:
+          WDA_ARTIFACT: ${{ inputs.wda }}
+        run: |
+          echo "Searching for WebDriverAgent build inside downloaded artifact..."
+
+          ls -R ./wda-derived
+
+          # Find the precompiled WDA app
+          WDA_APP=$(find "./$WDA_ARTIFACT" -name "WebDriverAgentRunner-Runner.app" -type d | head -n 1)
+
+          if [ -z "$WDA_APP" ]; then
+            echo "ERROR: WebDriverAgentRunner-Runner.app not found inside artifact '${{ inputs.wda }}'"
+            exit 1
+          fi
+
+          echo "WDA app found at: $WDA_APP"
+
+          # Locate the booted simulator
+          echo "Resolving booted simulator UDID for $DEVICE (iOS $OS_VERSION)..."
+          SIM_ID="$UDID_DEVICE"
+
+          if [ -z "$SIM_ID" ]; then
+            echo "ERROR: No booted simulator matches: $DEVICE (iOS $OS_VERSION)"
+            xcrun simctl list
+            exit 1
+          fi
+
+          echo "Booted simulator detected: $SIM_ID"
+
+          # Install WebDriverAgent
+          echo "Installing WebDriverAgent..."
+          xcrun simctl install "$SIM_ID" "$WDA_APP"
+          echo "WDA installed successfully"
+
+          # Launch WebDriverAgent service
+          echo "Launching WebDriverAgent..."
+          xcrun simctl launch "$SIM_ID" com.facebook.WebDriverAgentRunner
+
+          echo "WebDriverAgent is now running on the simulator"
 
       # Set up enviroment
       - name: Setup JDK
