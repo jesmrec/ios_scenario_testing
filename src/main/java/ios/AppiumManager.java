@@ -82,7 +82,7 @@ public class AppiumManager {
             capabilities.setCapability("appium:deviceName", "iPhone 16");
         }
 
-        capabilities.setCapability("appium:udid", System.getProperty("udid"));
+        //capabilities.setCapability("appium:udid", System.getProperty("udid"));
 
         capabilities.setCapability("appium:app", app.getAbsolutePath());
 
@@ -99,7 +99,7 @@ public class AppiumManager {
 
         capabilities.setCapability("appium:commandTimeouts", 5000);
 
-        capabilities.setCapability("appium:platformVersion", "18.6");
+        capabilities.setCapability("appium:platformVersion", "18.5");
 
         capabilities.setCapability("usePrebuiltWDA", true);
 

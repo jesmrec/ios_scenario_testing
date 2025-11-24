@@ -73,6 +73,12 @@ jobs:
           fi
           echo "✅ .app found and ready for testing"
 
+      - name: Start Appium
+        run: |
+          mkdir -p logs video
+          chmod +x ./runAppium.sh
+          ./runAppium.sh
+
       # Launch simulator
       - name: Start iOS Simulator
         run: |
@@ -96,7 +102,7 @@ jobs:
           STATE=$(xcrun simctl list devices | grep "$UDID" | awk -F'[()]' '{print $4}')
 
           # Export UDID always
-          echo "UDID_DEVICE=$UDID" >> $GITHUB_ENV
+          echo "UDID=$UDID" >> $GITHUB_ENV
 
           if [ "$STATE" = "Booted" ]; then
             echo "✅ Simulator '$DEVICE' ($OS_VERSION) is already running (UDID: $UDID)."
@@ -175,12 +181,6 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
-      - name: Start Appium
-        run: |
-          mkdir -p logs video
-          chmod +x ./runAppium.sh
-          ./runAppium.sh
 
       # Launch tests
       - name: Launch tests

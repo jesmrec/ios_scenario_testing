@@ -79,6 +79,7 @@ export oc=$OC_SERVER_URL
 export appium=$APPIUM_URL
 export udid=$UDID_DEVICE
 export backend=$BACKEND
+export device=$DEFAULT_DEVICE
 
 if [ -z "$oc" ]
 then
@@ -99,6 +100,7 @@ then
   -Dappium=$appium \
   -Dudid=$udid \
   -Dserver=$oc \
+  -Ddevice=$device \
   -Dbackend=$backend
 else
   ./gradlew clean test \
@@ -107,5 +109,6 @@ else
   -Dappium=$appium \
   -Dudid=$udid \
   -Dserver=$oc \
+  -Ddevice=$device \
   -Dbackend=$backend
 fi
