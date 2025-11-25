@@ -85,16 +85,16 @@ jobs:
           echo "Creating and booting iOS Simulator..."
 
           DEVICE="${{ vars.DEFAULT_DEVICE }}"
-          OS_VERSION="${{ vars.DEFAULT_OS }}"
+          #OS_VERSION="${{ vars.DEFAULT_OS }}"
 
           # Find the UDID of the desired simulator
-          UDID=$(xcrun simctl list devices "iOS $OS_VERSION" \
+          UDID=$(xcrun simctl list devices "iOS $OS" \
             | grep -E "^\s*$DEVICE \(" \
             | head -n 1 \
             | awk -F '[()]' '{print $2}')
 
           if [ -z "$UDID" ]; then
-            echo "❌ Simulator not found: $DEVICE ($OS_VERSION)"
+            echo "❌ Simulator not found: $DEVICE ($OS)"
             exit 1
           fi
 
@@ -105,9 +105,9 @@ jobs:
           echo "UDID=$UDID" >> $GITHUB_ENV
 
           if [ "$STATE" = "Booted" ]; then
-            echo "✅ Simulator '$DEVICE' ($OS_VERSION) is already running (UDID: $UDID)."
+            echo "✅ Simulator '$DEVICE' ($OS) is already running (UDID: $UDID)."
           else
-            echo "🚀 Booting simulator '$DEVICE' ($OS_VERSION)..."
+            echo "🚀 Booting simulator '$DEVICE' ($OS)..."
             xcrun simctl boot "$UDID"
             xcrun simctl bootstatus "$UDID" -b
             echo "✅ Simulator is now ready."
@@ -139,11 +139,11 @@ jobs:
           echo "WDA app found at: $WDA_APP"
 
           # Locate the booted simulator
-          echo "Resolving booted simulator UDID for $DEVICE (iOS $OS_VERSION)..."
-          SIM_ID="$UDID_DEVICE"
+          echo "Resolving booted simulator UDID for $DEVICE (iOS $OS)..."
+          SIM_ID="$UDID"
 
           if [ -z "$SIM_ID" ]; then
-            echo "ERROR: No booted simulator matches: $DEVICE (iOS $OS_VERSION)"
+            echo "ERROR: No booted simulator matches: $DEVICE (iOS $OS)"
             xcrun simctl list
             exit 1
           fi
