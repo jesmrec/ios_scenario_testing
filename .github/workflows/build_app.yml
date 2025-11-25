@@ -47,6 +47,14 @@ jobs:
           echo "OS_VERSION=${{ inputs.os_version || env.DEFAULT_OS }}" >> $GITHUB_ENV
           echo "DEVICE=${{ inputs.device || env.DEFAULT_DEVICE }}" >> $GITHUB_ENV
 
+      - name: Select Xcode version
+        env:
+          XCODE_VERSION: ${{ vars.DEFAULT_XCODE }}
+        run: |
+          echo "Selecting Xcode version $XCODE_VERSION"
+          sudo xcode-select -s /Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer
+          xcodebuild -version
+
       # Clone the iOS app repository with submodules
       - name: Clone external repo
         run: git clone --recurse-submodules https://github.com/owncloud/ios-app.git .
@@ -89,7 +97,7 @@ jobs:
             -project ownCloud.xcodeproj \
             -scheme ownCloud \
             -sdk iphonesimulator \
-            -destination "generic/platform=iOS Simulator" \
+            -destination "platform=iOS Simulator,name=$DEVICE,OS=$DEFAULT_OS" \
             -configuration $CONFIGURATION \
             -derivedDataPath $DERIVED_DATA \
             -skipPackagePluginValidation \
@@ -135,6 +143,13 @@ jobs:
       - name: List openssl.framework content and file type
         run: |
           ls -l ./DerivedData/Build/Products/Debug-iphonesimulator/ownCloud.app/Frameworks/openssl.framework
+
+      # Read CFBundleExecutable from openssl.framework
+      - name: Inspect CFBundleExecutable of openssl.framework
+        run: |
+          INFO_PLIST="./DerivedData/Build/Products/Debug-iphonesimulator/ownCloud.app/Frameworks/openssl.framework/Info.plist"
+          echo "Reading CFBundleExecutable from $INFO_PLIST"
+          defaults read "$INFO_PLIST" CFBundleExecutable || echo "❌ CFBundleExecutable not found"
 
       # Zip the .app folder to upload as artifact
       - name: Zip .app

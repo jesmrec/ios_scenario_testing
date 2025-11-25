@@ -10,7 +10,6 @@ jobs:
   build_app:
     uses: ./.github/workflows/build_app.yml
     with:
-      xcode_version: ${{ vars.DEFAULT_XCODE }}
       os_version: ${{ vars.DEFAULT_OS }}
       device: ${{ vars.DEFAULT_DEVICE }}
 

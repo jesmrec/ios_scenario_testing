@@ -29,6 +29,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Select Xcode version
+        env:
+          XCODE_VERSION: ${{ vars.DEFAULT_XCODE }}
+        run: |
+          echo "Selecting Xcode version $XCODE_VERSION"
+          sudo xcode-select -s /Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer
+          xcodebuild -version
+
       # Download artifacts
       - name: Download app artifact
         uses: actions/download-artifact@v4
@@ -143,7 +151,7 @@ jobs:
           SIM_ID="$UDID"
 
           if [ -z "$SIM_ID" ]; then
-            echo "ERROR: No booted simulator matches: $DEVICE (iOS $OS)"
+            echo "ERROR: UDID is empty, cannot find booted simulator!"
             xcrun simctl list
             exit 1
           fi
@@ -182,10 +190,115 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Check if Appium is running
+        run: |
+          set -e
+
+          APP_URL="http://127.0.0.1:4723"
+          echo "Checking Appium at $APP_URL"
+
+          #
+          # 1) Check if port 4723 is open
+          #
+          if command -v nc >/dev/null 2>&1; then
+            if nc -z 127.0.0.1 4723; then
+              echo "Port 4723 is open"
+            else
+              echo "Port 4723 is not open (Appium may not be listening)"
+              exit 1
+            fi
+          else
+            echo "'nc' is not available — skipping port check"
+          fi
+
+
+          #
+          # 2) Poll /status and /wd/hub/status
+          #
+          MAX_RETRIES=15
+          SLEEP=1
+          APP_READY=false
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Checking Appium status (attempt $i/$MAX_RETRIES)..."
+
+            if curl -s "$APP_URL/status" | grep -q '"ready":true'; then
+              echo "✓ Appium is ready (via /status)"
+              APP_READY=true
+              break
+            fi
+
+            if curl -s "$APP_URL/wd/hub/status" | grep -q '"ready":true'; then
+              echo "✓ Appium is ready (via /wd/hub/status)"
+              APP_READY=true
+              break
+            fi
+
+            sleep $SLEEP
+          done
+
+
+          #
+          # 3) Check if WebDriverAgent is running on the simulator
+          #
+          echo "Checking if WebDriverAgent is running on simulator $UDID..."
+
+          # Evita el “Broken pipe” silenciando stderr
+          if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q WebDriverAgent; then
+            echo "✓ WebDriverAgent process is running"
+            WDA_STATUS=running
+          else
+            echo "✗ WebDriverAgent process NOT listed in launchctl"
+            WDA_STATUS=missing
+          fi
+
+
+          #
+          # 4) Deep check: verify that the WDA bundle exists in Appium installation
+          #
+          WDA_DIR="/usr/local/lib/node_modules/appium/node_modules/appium-xcuitest-driver/WebDriverAgent"
+
+          echo "Checking Appium WDA bundle at:"
+          echo "  $WDA_DIR"
+
+          if [ -d "$WDA_DIR" ]; then
+            echo "✓ WDA bundle exists in the Appium installation"
+          else
+            echo "✗ WDA bundle is missing in Appium installation"
+            echo "  This could cause WDA build/start failures"
+          fi
+
+
+          #
+          # 5) If Appium is ready → OK
+          #
+          if [ "$APP_READY" = true ]; then
+            echo "Appium is ready"
+            exit 0
+          fi
+
+
+          #
+          # 6) Appium NOT ready → show logs and fail
+          #
+          echo "✗ Appium did not become ready after $MAX_RETRIES attempts."
+
+          if [ -f appium.log ]; then
+            echo "===== Last lines of appium.log ====="
+            tail -n 200 appium.log || true
+            echo "===================================="
+          else
+            echo "No appium.log found."
+          fi
+
+          exit 1
+
       # Launch tests
       - name: Launch tests
         env:
           OC_SERVER_URL: ${{ secrets.OC_SERVER_URL }}
           BACKEND: "oCIS"
         run: |
+          export UDID_DEVICE="$UDID"
+          echo "UDID of sim to execute: $UDID"
           ./executeTests -t @createfolder
