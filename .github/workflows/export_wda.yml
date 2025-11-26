@@ -1,0 +1,59 @@
+name: Export Native WDA
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      os_version:
+        description: 'iOS Simulator OS version'
+        type: string
+      device:
+        description: 'Simulator device name'
+        type: string
+    outputs:
+      wda-artifact-name:
+        description: "Name of the artifact containing the native WDA"
+        value: wda-native.zip
+
+jobs:
+  export-wda:
+    runs-on: macos-15
+    steps:
+      - name: Locate native WDA inside simulator runtime
+        id: find-wda
+        run: |
+          OS="${{ inputs.os_version }}"
+
+          echo "🔍 Searching runtime for iOS $OS..."
+
+          RUNTIME_ROOT=$(xcrun simctl list runtimes -j \
+            | jq -r '.runtimes[] | select(.name=="iOS '"$OS"'") | .bundlePath')
+
+          echo "Runtime root detected: $RUNTIME_ROOT"
+
+          if [ ! -d "$RUNTIME_ROOT" ]; then
+            echo "❌ Could not find runtime for iOS $OS"
+            exit 1
+          fi
+
+          NATIVE_WDA="$RUNTIME_ROOT/Contents/Resources/RuntimeRoot/usr/libexec/WebDriverAgent"
+
+          echo "WDA path: $NATIVE_WDA"
+
+          if [ ! -d "$NATIVE_WDA" ]; then
+            echo "❌ No native WebDriverAgent found"
+            exit 1
+          fi
+
+          mkdir -p extracted-wda
+          cp -R "$NATIVE_WDA" extracted-wda/
+
+      - name: Zip native WDA
+        run: |
+          ditto -c -k --sequesterRsrc extracted-wda wda-native.zip
+
+      - name: Upload WDA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wda-native.zip
+          path: wda-native.zip
