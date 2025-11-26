@@ -44,6 +44,11 @@ jobs:
             -configuration Debug \
             -derivedDataPath ./DerivedData \
             -destination "platform=iOS Simulator,name=$DEVICE,OS=$OS" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS="x86_64 arm64" \
+            EXCLUDED_ARCHS="" \
             build
 
       - name: Zip WebDriverAgent DerivedData

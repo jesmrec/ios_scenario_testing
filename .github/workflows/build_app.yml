@@ -151,6 +151,18 @@ jobs:
           echo "Reading CFBundleExecutable from $INFO_PLIST"
           defaults read "$INFO_PLIST" CFBundleExecutable || echo "❌ CFBundleExecutable not found"
 
+      # Fix CFBundleExecutable for openssl.framework
+      - name: Ensure CFBundleExecutable exists in openssl.framework
+        run: |
+          FRAMEWORK_PLIST="$APP_PATH/Frameworks/openssl.framework/Info.plist"
+          if ! /usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$FRAMEWORK_PLIST" &>/dev/null; then
+            echo "❌ CFBundleExecutable not found, adding it..."
+            /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string openssl" "$FRAMEWORK_PLIST"
+            echo "✅ CFBundleExecutable added"
+          else
+            echo "✅ CFBundleExecutable already exists"
+          fi
+
       # Zip the .app folder to upload as artifact
       - name: Zip .app
         run: |
