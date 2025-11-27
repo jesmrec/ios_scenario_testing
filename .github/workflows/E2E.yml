@@ -13,19 +13,19 @@ jobs:
       os_version: ${{ vars.DEFAULT_OS }}
       device: ${{ vars.DEFAULT_DEVICE }}
 
-  export_wda:
-    uses: ./.github/workflows/export_wda.yml
-    with:
-      os_version: ${{ vars.DEFAULT_OS }}
-      device: ${{ vars.DEFAULT_DEVICE }}
+  #wda:
+  #  uses: ./.github/workflows/export_wda.yml
+  #  with:
+  #    os_version: ${{ vars.DEFAULT_OS }}
+  #    device: ${{ vars.DEFAULT_DEVICE }}
 
   tests:
     needs:
       - build_app
-      - export_wda
+    #  - wda
     uses: ./.github/workflows/launch_tests.yml
     with:
       artifact_app: ownCloud.app.zip
-      wda: wda-native.zip
+    #  wda: wda-native.zip
     secrets:
       oc_server_url: ${{ secrets.OC_SERVER_URL }}

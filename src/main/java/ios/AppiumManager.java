@@ -99,11 +99,13 @@ public class AppiumManager {
 
         capabilities.setCapability("appium:commandTimeouts", 5000);
 
+        capabilities.setCapability("appium:wdaLaunchTimeout", 120000);
+
         capabilities.setCapability("appium:platformVersion", "18.5");
 
-        capabilities.setCapability("appium:usePrebuiltWDA", true);
+        capabilities.setCapability("appium:usePrebuiltWDA", false);
 
-        capabilities.setCapability("appium:useNewWDA", false);
+        capabilities.setCapability("appium:useNewWDA", true);
 
     }
 }

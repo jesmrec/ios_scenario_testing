@@ -7,10 +7,10 @@ on:
         description: 'Name of the .app artifact to test'
         type: string
         required: true
-      wda:
-        description: 'Name of WDA artifact'
-        type: string
-        required: true
+      #wda:
+      #  description: 'Name of WDA artifact'
+      #  type: string
+      #  required: true
     secrets:
       OC_SERVER_URL:
         required: true  
@@ -44,11 +44,11 @@ jobs:
           name: ${{ inputs.artifact_app }}
           path: ./src/test/resources 
 
-      - name: Download WebDriverAgent artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.wda }}
-          path: ./
+      #- name: Download WebDriverAgent artifact
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: ${{ inputs.wda }}
+      #    path: ./
 
       # List folders
       - name: List stuff
@@ -81,19 +81,12 @@ jobs:
           fi
           echo "✅ .app found and ready for testing"
 
-      - name: Start Appium
-        run: |
-          mkdir -p logs video
-          chmod +x ./runAppium.sh
-          ./runAppium.sh
-
       # Launch simulator
       - name: Start iOS Simulator
         run: |
           echo "Creating and booting iOS Simulator..."
 
           DEVICE="${{ vars.DEFAULT_DEVICE }}"
-          #OS_VERSION="${{ vars.DEFAULT_OS }}"
 
           # Find the UDID of the desired simulator
           UDID=$(xcrun simctl list devices "iOS $OS" \
@@ -124,54 +117,60 @@ jobs:
           # Optionally, print the booted simulator list for debugging
           xcrun simctl list devices | grep Booted
 
-      - name: Unzip WDA
-        run: |
-          ls -al .
-          unzip -q "${{ inputs.wda }}" -d .
-          ls -al .
+      #- name: Unzip WDA
+      #  run: |
+      #    ls -al .
+      #    unzip -q "${{ inputs.wda }}" -d .
+      #    ls -al .
 
-      - name: Install and launch WebDriverAgent on simulator
-        run: |
-          echo "Searching for WebDriverAgent build inside downloaded artifact..."
+      #- name: Install and launch WebDriverAgent on simulator
+      #  run: |
+      #    echo "Searching for WebDriverAgent build inside downloaded artifact..."
 
-          ls -al .
+      #    ls -al .
 
           # Find the precompiled WDA app
-          WDA_APP=$(find ./DerivedData -name "WebDriverAgentRunner-Runner.app" -type d | head -n 1)
+      #    WDA_APP=$(find ./DerivedData -name "WebDriverAgentRunner-Runner.app" -type d | head -n 1)
 
-          if [ -z "$WDA_APP" ]; then
-            echo "ERROR: WebDriverAgentRunner-Runner.app not found inside artifact '${{ inputs.wda }}'"
-            exit 1
-          fi
+      #    if [ -z "$WDA_APP" ]; then
+      #      echo "ERROR: WebDriverAgentRunner-Runner.app not found inside artifact '${{ inputs.wda }}'"
+      #      exit 1
+      #    fi
 
-          echo "WDA app found at: $WDA_APP"
+      #    echo "WDA app found at: $WDA_APP"
 
           # Locate the booted simulator
-          echo "Resolving booted simulator UDID for $DEVICE (iOS $OS)..."
-          SIM_ID="$UDID"
+      #    echo "Resolving booted simulator UDID for $DEVICE (iOS $OS)..."
+      #    SIM_ID="$UDID"
 
-          if [ -z "$SIM_ID" ]; then
-            echo "ERROR: UDID is empty, cannot find booted simulator!"
-            xcrun simctl list
-            exit 1
-          fi
+      #    if [ -z "$SIM_ID" ]; then
+      #      echo "ERROR: UDID is empty, cannot find booted simulator!"
+      #      xcrun simctl list
+      #      exit 1
+      #    fi
 
-          echo "Booted simulator detected: $SIM_ID"
+      #    echo "Booted simulator detected: $SIM_ID"
 
           # Install WebDriverAgent
-          echo "Installing WebDriverAgent..."
-          xcrun simctl install "$SIM_ID" "$WDA_APP"
-          echo "WDA installed successfully"
+      #    echo "Installing WebDriverAgent..."
+      #    xcrun simctl install "$SIM_ID" "$WDA_APP"
+      #    echo "WDA installed successfully"
 
           # Get bundle ID from WDA app
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$WDA_APP/Info.plist")
-          echo "Bundle Identifier: $BUNDLE_ID"
+      #    BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$WDA_APP/Info.plist")
+      #    echo "Bundle Identifier: $BUNDLE_ID"
 
           # Launch WebDriverAgent service
-          echo "Launching WebDriverAgent..."
-          xcrun simctl launch "$SIM_ID" "$BUNDLE_ID"
+      #    echo "Launching WebDriverAgent..."
+      #    xcrun simctl launch "$SIM_ID" "$BUNDLE_ID"
 
-          echo "WebDriverAgent is now running on the simulator"
+      #    echo "WebDriverAgent is now running on the simulator"
+
+      - name: Start Appium
+        run: |
+          mkdir -p logs video
+          chmod +x ./runAppium.sh
+          ./runAppium.sh
 
       # Set up enviroment
       - name: Setup JDK
@@ -196,7 +195,7 @@ jobs:
 
           APP_URL="http://127.0.0.1:4723"
           echo "Checking Appium at $APP_URL"
-
+          sleep 10
           #
           # 1) Check if port 4723 is open
           #
@@ -228,8 +227,8 @@ jobs:
               break
             fi
 
-            if curl -s "$APP_URL/wd/hub/status" | grep -q '"ready":true'; then
-              echo "✓ Appium is ready (via /wd/hub/status)"
+            if curl -s "$APP_URL" | grep -q '"ready":true'; then
+              echo "✓ Appium is ready "
               APP_READY=true
               break
             fi
@@ -237,36 +236,35 @@ jobs:
             sleep $SLEEP
           done
 
-
           #
           # 3) Check if WebDriverAgent is running on the simulator
           #
-          echo "Checking if WebDriverAgent is running on simulator $UDID..."
+          #echo "Checking if WebDriverAgent is running on simulator $UDID..."
 
           # Evita el “Broken pipe” silenciando stderr
-          if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q WebDriverAgent; then
-            echo "✓ WebDriverAgent process is running"
-            WDA_STATUS=running
-          else
-            echo "✗ WebDriverAgent process NOT listed in launchctl"
-            WDA_STATUS=missing
-          fi
+          #if xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q WebDriverAgent; then
+          #  echo "✓ WebDriverAgent process is running"
+          #  WDA_STATUS=running
+          #else
+          #  echo "✗ WebDriverAgent process NOT listed in launchctl"
+          #  WDA_STATUS=missing
+          #fi
 
 
           #
           # 4) Deep check: verify that the WDA bundle exists in Appium installation
           #
-          WDA_DIR="/usr/local/lib/node_modules/appium/node_modules/appium-xcuitest-driver/WebDriverAgent"
+          #WDA_DIR="/usr/local/lib/node_modules/appium/node_modules/appium-xcuitest-driver/WebDriverAgent"
 
-          echo "Checking Appium WDA bundle at:"
-          echo "  $WDA_DIR"
+          #echo "Checking Appium WDA bundle at:"
+          #echo "  $WDA_DIR"
 
-          if [ -d "$WDA_DIR" ]; then
-            echo "✓ WDA bundle exists in the Appium installation"
-          else
-            echo "✗ WDA bundle is missing in Appium installation"
-            echo "  This could cause WDA build/start failures"
-          fi
+          #if [ -d "$WDA_DIR" ]; then
+          #  echo "✓ WDA bundle exists in the Appium installation"
+          #else
+          #  echo "✗ WDA bundle is missing in Appium installation"
+          #  echo "  This could cause WDA build/start failures"
+          #fi
 
 
           #

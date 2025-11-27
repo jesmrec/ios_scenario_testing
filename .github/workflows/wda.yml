@@ -1,4 +1,4 @@
-name: Build WDA
+name: Build WDA (Warm-up)
 
 on:
   workflow_call:
@@ -9,10 +9,6 @@ on:
       device:
         description: 'Simulator device name'
         type: string
-    outputs:
-      wda:
-        description: "wda build to install in simulator"
-        value: ./wda-derived.zip
 
 jobs:
   build-wda:
@@ -31,35 +27,16 @@ jobs:
           xcodebuild -version
 
       - name: Clone WebDriverAgent
-        run: |
-          git clone https://github.com/appium/WebDriverAgent.git
+        run: git clone https://github.com/appium/WebDriverAgent.git
 
-      - name: Build WebDriverAgent for simulator
+      - name: Warm-up WDA build
         run: |
           cd WebDriverAgent
           xcodebuild \
             -project WebDriverAgent.xcodeproj \
             -scheme WebDriverAgentRunner \
             -sdk iphonesimulator \
-            -configuration Debug \
-            -derivedDataPath ./DerivedData \
             -destination "platform=iOS Simulator,name=$DEVICE,OS=$OS" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ARCHS="x86_64 arm64" \
-            EXCLUDED_ARCHS="" \
-            build
-
-      - name: Zip WebDriverAgent DerivedData
-        run: |
-          cd WebDriverAgent
-          ls -al
-          zip -r ../wda-derived.zip DerivedData
-          ls -al ..
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wda-derived.zip
-          path: wda-derived.zip
+            -configuration Debug \
+            -derivedDataPath /tmp/wda \
+            build-for-testing
