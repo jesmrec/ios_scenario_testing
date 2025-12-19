@@ -79,7 +79,7 @@ public class AppiumManager {
         if (System.getProperty("device") != null && !System.getProperty("device").isEmpty()) {
             capabilities.setCapability("appium:deviceName", System.getProperty("device"));
         } else {
-            capabilities.setCapability("appium:deviceName", "iPhone 16");
+            capabilities.setCapability("appium:deviceName", "iPhone 17");
         }
 
         capabilities.setCapability("appium:udid", System.getProperty("udid"));
@@ -99,9 +99,11 @@ public class AppiumManager {
 
         capabilities.setCapability("appium:commandTimeouts", 5000);
 
-        capabilities.setCapability("appium:platformVersion", "18.5");
+        capabilities.setCapability("appium:platformVersion", "26.2");
 
         capabilities.setCapability("appium:useNewWDA", false);
+
+        capabilities.setCapability("appium:autoFillPasswords", false);
 
     }
 }
