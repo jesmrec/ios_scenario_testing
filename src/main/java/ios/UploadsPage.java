@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.pagefactory.AppiumFieldDecorator;
 import io.appium.java_client.pagefactory.iOSXCUITFindBy;
 import utils.entities.OCFile;
@@ -69,17 +70,10 @@ public class UploadsPage extends CommonPage {
     public boolean photoDisplayed(int expectedPhotos) {
         Log.log(Level.FINE, "Starts photoDisplayed: " + expectedPhotos);
         // List of files is inside a visible collection view
-        List<WebElement> collections = findListCss("XCUIElementTypeCollectionView");
-        WebElement visibleCollection = collections.stream()
-                .filter(WebElement::isDisplayed)
-                .findFirst()
-                .orElseThrow(() -> new NoSuchElementException("No visible XCUIElementTypeCollectionView found"));
-        // One XCUIElementTypeCell for each item in the list. The footer is also a cell!!
-        List<WebElement> cells = visibleCollection.findElements(By.className("XCUIElementTypeCell"));
-
-        Log.log(Level.FINE, "Number of elements +1: " + cells.size()
-                + " Expected: " + expectedPhotos);
-        // The footer is also a cell, not interesting for us
-        return (cells.size() -1 ) == expectedPhotos;
+        // Get the collection out of the sidebar (static)
+        WebElement imageCollection = findListCss("XCUIElementTypeCollectionView").get(1);
+        List<WebElement> images = imageCollection.findElements(AppiumBy.iOSNsPredicateString(
+                "type == 'XCUIElementTypeCell' AND name BEGINSWITH 'Photo-'"));
+        return images.size() == expectedPhotos;
     }
 }
