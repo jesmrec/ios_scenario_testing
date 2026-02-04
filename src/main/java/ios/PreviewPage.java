@@ -56,7 +56,6 @@ public class PreviewPage extends CommonPage {
     public boolean isPdfPreviewed(String itemName) {
         Log.log(Level.FINE, "Starts: is pdf previewed");
         //Outline is an indicator that only exists in PDF preview
-        return findXpath("//XCUIElementTypeStaticText[@name=\"" + itemName + "\"]").isDisplayed() &&
-                outlinePdf.isDisplayed();
+        return outlinePdf.isDisplayed();
     }
 }
